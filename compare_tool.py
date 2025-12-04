@@ -25,7 +25,7 @@ TRANSLATIONS = {
     'zh': {
         'title': '本地化库存比对工具',
         'local_run': '(本地运行)',
-        'copyright': '© Yining.li',
+        'copyright': '© Kuriyamasss',
         'upload_old': '上传 - 旧 库存表（Excel 或 CSV）：',
         'upload_new': '上传 - 新 库存表（Excel 或 CSV）：',
         'upload_hint': '两表上传后，会读取 sheet 列表（若为 Excel）并在下一步呈现 sheet 与表头选择。',
