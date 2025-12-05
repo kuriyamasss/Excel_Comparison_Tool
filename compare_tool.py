@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-# compare_tool.py
-# Requirements: python3, Flask, pandas, openpyxl
-# Install: pip install flask pandas openpyxl
+# compare_tool.py (后端主文件 — 请保持文件名不变)
+# 需求: python3, Flask, pandas, openpyxl
+# 安装: pip install flask pandas openpyxl
 
 import os
 import tempfile
@@ -9,18 +9,24 @@ import uuid
 import webbrowser
 import re
 from datetime import datetime
-from flask import Flask, request, redirect, url_for, send_file, render_template_string, flash, make_response
+from flask import (
+    Flask, request, redirect, url_for, send_file,
+    render_template, flash, make_response, send_from_directory
+)
 import pandas as pd
 from pandas import ExcelFile
 
-app = Flask(__name__)
+# --------------------
+# 配置
+# --------------------
+app = Flask(__name__, static_folder='static', template_folder='templates')
 app.secret_key = "replace-this-with-random-if-needed"
 app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024
 
 UPLOAD_DIR = os.path.join(tempfile.gettempdir(), "py_excel_compare")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# Translations: simplified Chinese (zh) default, Vietnamese (vi)
+# 翻译字典（简中/越南），保持后端 i18n 支持
 TRANSLATIONS = {
     'zh': {
         'title': '本地化库存比对工具',
@@ -53,7 +59,7 @@ TRANSLATIONS = {
         'no_files': '请同时上传旧表与新表。',
         'save_failed': '存档失败: ',
         'read_failed': '读取表格失败: ',
-        'temp_missing': '暂存档案不存在，请重新上传。',
+        'temp_missing': '暂存档案不存在，请重新上傳。',
         'key_missing': '所选键值在上传的表格中不存在，请重新上传并选择正确栏位。',
         'dup_found': '发现重复键值： 请先在原始档处理唯一键或改变重复策略。',
         'generate_failed': '生成结果档失败: ',
@@ -104,6 +110,9 @@ TRANSLATIONS = {
     }
 }
 
+# --------------------
+# i18n helper
+# --------------------
 def get_lang_from_request():
     lang = request.args.get('lang')
     if lang and lang in TRANSLATIONS:
@@ -114,259 +123,11 @@ def get_lang_from_request():
     return 'zh'
 
 def t(key):
-    lang = get_lang_from_request()
-    return TRANSLATIONS.get(lang, TRANSLATIONS['zh']).get(key, key)
+    return TRANSLATIONS.get(get_lang_from_request(), TRANSLATIONS['zh']).get(key, key)
 
-# HTML template
-HTML = """
-<!doctype html>
-<html>
-<head><meta charset="utf-8"><title>{{t('title')}}</title>
-<style>
-body{font-family:Arial, Helvetica, sans-serif; margin:0; padding-top:72px; background:#fafafa;}
-.main{max-width:1100px;margin:0 auto;padding:18px;}
-.header{position: fixed; top: 0; left: 0; right: 0; height: 64px; z-index: 9999; background: #ffffff; border-bottom: 1px solid #e0e0e0; display:flex; align-items:center;justify-content:space-between;padding: 12px 20px; box-shadow: 0 1px 6px rgba(0,0,0,0.04);}
-.header-left {display:flex;align-items:center;gap:12px;}
-.header-title {font-size:18px;margin:0;}
-.header-right {display:flex;align-items:center;gap:12px;font-size:13px;color:#666;}
-.lang-select {padding:6px;border-radius:4px;border:1px solid #ddd;background:#fff;}
-.card{background:#fff;padding:16px;border-radius:8px;margin-top:12px;box-shadow:0 1px 6px rgba(0,0,0,0.03);}
-label{display:block;margin-top:12px;}
-input[type=file]{margin-top:6px;}
-select, button, input[type=number]{margin-top:8px;padding:8px;font-size:14px;}
-.notice{color:#666;margin-top:6px;}
-.result-link{margin-top:16px;padding:12px;background:#f4f4f4;border-radius:6px;}
-
-/* overlay: spinner only */
-.overlay { display:none; position: fixed; left:0; right:0; top:0; bottom:0; background: rgba(255,255,255,0.85); z-index: 10000; align-items: center; justify-content: center; flex-direction: column; gap:12px; }
-.overlay .box { display:flex; align-items:center; gap:12px; background: #fff; padding:14px 18px; border-radius:8px; box-shadow:0 6px 18px rgba(0,0,0,0.08); }
-.spinner{ width:44px; height:44px; border-radius:50%; border:5px solid rgba(0,0,0,0.08); border-top-color:#1976d2; animation: spin 1s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg);} }
-
-/* reset button style (淡橙底，白字) */
-.reset-btn{
-  background: #ffa94d;
-  color: #ffffff;
-  border: none;
-  padding: 8px 14px;
-  border-radius: 6px;
-  font-weight: 600;
-  cursor: pointer;
-  margin-left: 8px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
-}
-.reset-btn:active{ transform: translateY(1px); }
-</style>
-</head>
-<body>
-  <div class="header">
-    <div class="header-left">
-      <div>
-        <div class="header-title">{{t('title')}}</div>
-        <div style="font-size:12px;color:#888;">{{t('local_run')}}</div>
-      </div>
-    </div>
-    <div class="header-right">
-      <div style="color:#666;font-size:13px;">{{t('copyright')}}</div>
-      <div>
-        <label style="display:inline-block;margin:0 6px 0 0;font-size:13px;color:#666;">{{t('lang_label')}}</label>
-        <select id="lang" class="lang-select">
-          <option value="zh" {% if get_lang=='zh' %}selected{% endif %}>简体中文</option>
-          <option value="vi" {% if get_lang=='vi' %}selected{% endif %}>Tiếng Việt</option>
-        </select>
-      </div>
-    </div>
-  </div>
-
-  <div class="main">
-    <form method="post" action="/upload" enctype="multipart/form-data" class="card">
-      <label>{{t('upload_old')}}
-        <input type="file" name="file_old" accept=".xls,.xlsx,.csv" required>
-      </label>
-      <label>{{t('upload_new')}}
-        <input type="file" name="file_new" accept=".xls,.xlsx,.csv" required>
-      </label>
-      <div class="notice">{{t('upload_hint')}}</div>
-      <button type="submit">{{t('upload_button')}}</button>
-    </form>
-
-    {% with messages = get_flashed_messages() %}
-      {% if messages %}
-        <ul style="color:darkred;margin-top:12px;">
-        {% for m in messages %}
-          <li>{{m}}</li>
-        {% endfor %}
-        </ul>
-      {% endif %}
-    {% endwith %}
-
-    {% if old_id and new_id %}
-    <div class="card">
-      <h3>{{t('step2_title')}}</h3>
-      <form method="post" action="/prepare_fields">
-        <input type="hidden" name="old_id" value="{{ old_id }}">
-        <input type="hidden" name="new_id" value="{{ new_id }}">
-
-        <label>{{t('sheet_old_label')}}
-          <select name="sheet_old">
-            {% if sheets_old %}
-              {% for s in sheets_old %}
-              <option value="{{s}}">{{s}}</option>
-              {% endfor %}
-            {% else %}
-              <option value="">(CSV / 无 sheet)</option>
-            {% endif %}
-          </select>
-        </label>
-
-        <label>{{t('sheet_new_label')}}
-          <select name="sheet_new">
-            {% if sheets_new %}
-              {% for s in sheets_new %}
-              <option value="{{s}}">{{s}}</option>
-              {% endfor %}
-            {% else %}
-              <option value="">(CSV / 无 sheet)</option>
-            {% endif %}
-          </select>
-        </label>
-
-        <label>{{t('header_identify')}}
-          <select name="header_mode">
-            <option value="auto" {% if header_mode=='auto' %}selected{% endif %}>{{t('header_auto')}}</option>
-            <option value="manual" {% if header_mode=='manual' %}selected{% endif %}>{{t('header_manual')}}</option>
-            <option value="none" {% if header_mode=='none' %}selected{% endif %}>{{t('header_none')}}</option>
-          </select>
-        </label>
-
-        <label>{{t('header_row_index')}}
-          <input type="number" name="header_row_index" min="0" value="{{ header_row_index or '' }}" placeholder="例如 0、1、2">
-        </label>
-
-        <button type="submit">{{t('prepare_fields')}}</button>
-      </form>
-    </div>
-    {% endif %}
-
-    {% if headers %}
-    <div class="card">
-      <h3>{{t('step3_title')}}</h3>
-      <form method="post" action="/compare">
-        <input type="hidden" name="old_id" value="{{ old_id }}">
-        <input type="hidden" name="new_id" value="{{ new_id }}">
-        <input type="hidden" name="sheet_old" value="{{ sheet_old }}">
-        <input type="hidden" name="sheet_new" value="{{ sheet_new }}">
-        <input type="hidden" name="header_mode" value="{{ header_mode }}">
-        <input type="hidden" name="header_row_index" value="{{ header_row_index }}">
-
-        <label>{{t('select_key')}}
-          <select name="key" required>
-            {% for h in headers %}
-            <option value="{{h}}">{{h}}</option>
-            {% endfor %}
-          </select>
-        </label>
-
-        <label>{{t('dup_strategy')}}
-          <select name="dup_strategy">
-            <option value="last" selected>{{t('dup_last')}}</option>
-            <option value="first">{{t('dup_first')}}</option>
-            <option value="error">{{t('dup_error')}}</option>
-          </select>
-        </label>
-        <button type="submit">{{t('compare_button')}}</button>
-      </form>
-    </div>
-    {% endif %}
-
-    {% if download_link and download_name %}
-    <div class="result-link">
-      <strong>{{t('download_ready')}}</strong>
-      <div style="margin-top:8px; display:flex; align-items:center; gap:12px;">
-        <button id="downloadBtn" data-url="{{ download_link }}" data-name="{{ download_name }}">{{t('download_button')}}</button>
-        <span style="color:#444;">{{ download_name }}</span>
-        <button id="resetBtn" class="reset-btn" type="button">{{t('reset_button')}}</button>
-      </div>
-    </div>
-    {% endif %}
-
-    <div class="notice" style="margin-top:18px;">{{t('large_hint')}}</div>
-  </div>
-
-  <div id="overlay" class="overlay">
-    <div class="box">
-      <div class="spinner" aria-hidden="true"></div>
-      <div style="font-weight:600;">{{t('processing')}}</div>
-    </div>
-  </div>
-
-<script>
-// Overlay control
-function showOverlay(){ const ov = document.getElementById('overlay'); if(ov) ov.style.display='flex'; }
-function hideOverlay(){ const ov = document.getElementById('overlay'); if(ov) ov.style.display='none'; }
-
-document.addEventListener('DOMContentLoaded', function(){
-  // show overlay on any form submit
-  document.querySelectorAll('form').forEach(function(f){
-    f.addEventListener('submit', function(e){ showOverlay(); });
-  });
-
-  // language selector: save cookie and reload with lang param
-  const sel = document.getElementById('lang');
-  if(sel){
-    sel.addEventListener('change', function(){
-      const val = sel.value;
-      document.cookie = 'lang=' + val + '; path=/; max-age=' + (365*24*60*60);
-      const u = new URL(window.location.href);
-      u.searchParams.set('lang', val);
-      window.location.href = u.toString();
-    });
-  }
-
-  // download via fetch; hide overlay in finally
-  const dl = document.getElementById('downloadBtn');
-  if(dl){
-    dl.addEventListener('click', async function(e){
-      e.preventDefault();
-      const url = dl.getAttribute('data-url');
-      const name = dl.getAttribute('data-name') || 'compare_result.xlsx';
-      try{
-        showOverlay();
-        const res = await fetch(url, { method: 'GET' });
-        if(!res.ok) throw new Error('Network response was not ok');
-        const blob = await res.blob();
-        const blobUrl = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = name;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(blobUrl);
-      }catch(err){
-        alert("{{t('download_failed')}}" + err.message);
-      }finally{
-        hideOverlay();
-      }
-    });
-  }
-
-  // reset button: hide overlay and navigate to root to reset UI state
-  const resetBtn = document.getElementById('resetBtn');
-  if(resetBtn){
-    resetBtn.addEventListener('click', function(e){
-      e.preventDefault();
-      hideOverlay();
-      // keep language cookie but reset UI: navigate root
-      window.location.href = '/';
-    });
-  }
-});
-</script>
-</body>
-</html>
-"""
-
+# --------------------
+# 辅助函数：文件保存、表头检测、读取表格
+# --------------------
 def safe_save_upload(file_storage, prefix):
     ext = os.path.splitext(file_storage.filename)[1].lower()
     fname = f"{prefix}_{uuid.uuid4().hex}{ext}"
@@ -433,19 +194,26 @@ def read_table(path, sheet_name=0, header_mode='auto', header_row_index=None, pr
     df.columns = [str(c).strip() for c in df.columns]
     return df
 
+# --------------------
+# 模板上下文注入（前端模板可使用 t('key') 与 get_lang）
+# --------------------
 @app.context_processor
 def inject_helpers():
     return dict(t=lambda k: TRANSLATIONS[get_lang_from_request()].get(k, k),
                 get_lang=get_lang_from_request())
 
+# --------------------
+# 路由：主页面（使用 templates/index.html）
+# --------------------
 @app.route('/', methods=['GET'])
 def index():
-    return render_template_string(HTML, old_id=None, new_id=None)
+    return render_template('index.html', old_id=None, new_id=None)
 
+# 上传
 @app.route('/upload', methods=['POST'])
 def upload():
     if 'file_old' not in request.files or 'file_new' not in request.files:
-        flash(TRANSLATIONS[get_lang_from_request()]['no_files'])
+        flash(t('no_files'))
         return redirect(url_for('index'))
     f_old = request.files['file_old']
     f_new = request.files['file_new']
@@ -453,7 +221,7 @@ def upload():
         old_path = safe_save_upload(f_old, "old")
         new_path = safe_save_upload(f_new, "new")
     except Exception as e:
-        flash(TRANSLATIONS[get_lang_from_request()]['save_failed'] + str(e))
+        flash(t('save_failed') + str(e))
         return redirect(url_for('index'))
 
     def get_sheets(path):
@@ -473,7 +241,7 @@ def upload():
     old_id = os.path.basename(old_path)
     new_id = os.path.basename(new_path)
 
-    resp = make_response(render_template_string(HTML, old_id=old_id, new_id=new_id,
+    resp = make_response(render_template('index.html', old_id=old_id, new_id=new_id,
                                   sheets_old=sheets_old, sheets_new=sheets_new,
                                   header_mode='auto', header_row_index=None))
     lang = request.args.get('lang')
@@ -481,6 +249,7 @@ def upload():
         resp.set_cookie('lang', lang, max_age=365*24*60*60, path='/')
     return resp
 
+# prepare fields (read headers)
 @app.route('/prepare_fields', methods=['POST'])
 def prepare_fields():
     old_id = request.form.get('old_id')
@@ -491,7 +260,7 @@ def prepare_fields():
     header_row_index = request.form.get('header_row_index', None)
 
     if not all([old_id, new_id]):
-        flash(TRANSLATIONS[get_lang_from_request()]['no_files'])
+        flash(t('no_files'))
         return redirect(url_for('index'))
 
     old_path = os.path.join(UPLOAD_DIR, old_id)
@@ -500,19 +269,20 @@ def prepare_fields():
         df_old = read_table(old_path, sheet_name=sheet_old, header_mode=header_mode, header_row_index=header_row_index)
         df_new = read_table(new_path, sheet_name=sheet_new, header_mode=header_mode, header_row_index=header_row_index)
     except Exception as e:
-        flash(TRANSLATIONS[get_lang_from_request()]['read_failed'] + str(e))
+        flash(t('read_failed') + str(e))
         return redirect(url_for('index'))
 
     headers_common = [h for h in df_old.columns if h in df_new.columns]
     if not headers_common:
-        flash(TRANSLATIONS[get_lang_from_request()]['no_common_columns'])
+        flash(t('no_common_columns'))
         return redirect(url_for('index'))
 
-    return render_template_string(HTML, headers=headers_common,
+    return render_template('index.html', headers=headers_common,
                                   old_id=old_id, new_id=new_id,
                                   sheet_old=sheet_old, sheet_new=sheet_new,
                                   header_mode=header_mode, header_row_index=header_row_index)
 
+# sanitize filename
 def sanitize_filename_component(s: str) -> str:
     if s is None:
         return ''
@@ -522,6 +292,7 @@ def sanitize_filename_component(s: str) -> str:
     s = re.sub(r'[^\w\-.]', '', s)
     return s[:100]
 
+# compare and output excel
 @app.route('/compare', methods=['POST'])
 def compare():
     key = request.form.get('key')
@@ -534,29 +305,29 @@ def compare():
     header_row_index = request.form.get('header_row_index', None)
 
     if not all([key, old_id, new_id]):
-        flash(TRANSLATIONS[get_lang_from_request()]['key_missing'])
+        flash(t('key_missing'))
         return redirect(url_for('index'))
     old_path = os.path.join(UPLOAD_DIR, old_id)
     new_path = os.path.join(UPLOAD_DIR, new_id)
     if not os.path.exists(old_path) or not os.path.exists(new_path):
-        flash(TRANSLATIONS[get_lang_from_request()]['temp_missing'])
+        flash(t('temp_missing'))
         return redirect(url_for('index'))
     try:
         df_old = read_table(old_path, sheet_name=sheet_old, header_mode=header_mode, header_row_index=header_row_index)
         df_new = read_table(new_path, sheet_name=sheet_new, header_mode=header_mode, header_row_index=header_row_index)
     except Exception as e:
-        flash(TRANSLATIONS[get_lang_from_request()]['read_failed'] + str(e))
+        flash(t('read_failed') + str(e))
         return redirect(url_for('index'))
 
     if key not in df_old.columns or key not in df_new.columns:
-        flash(TRANSLATIONS[get_lang_from_request()]['key_missing'])
+        flash(t('key_missing'))
         return redirect(url_for('index'))
 
     if dup_strategy == 'error':
         dup_old = df_old[df_old.duplicated(subset=[key], keep=False)]
         dup_new = df_new[df_new.duplicated(subset=[key], keep=False)]
         if not dup_old.empty or not dup_new.empty:
-            flash(TRANSLATIONS[get_lang_from_request()]['dup_found'])
+            flash(t('dup_found'))
             return redirect(url_for('index'))
 
     df_old[key] = df_old[key].astype(str).str.strip()
@@ -591,27 +362,30 @@ def compare():
             df_only_old.to_excel(writer, sheet_name='only_in_old')
             df_only_new.to_excel(writer, sheet_name='only_in_new')
     except Exception as e:
-        flash(TRANSLATIONS[get_lang_from_request()]['generate_failed'] + str(e))
+        flash(t('generate_failed') + str(e))
         return redirect(url_for('index'))
 
     download_link = url_for('download_file', filename=out_filename)
-    resp = make_response(render_template_string(HTML, download_link=download_link, download_name=out_filename))
+    resp = make_response(render_template('index.html', download_link=download_link, download_name=out_filename))
     lang = request.args.get('lang')
     if lang and lang in TRANSLATIONS:
         resp.set_cookie('lang', lang, max_age=365*24*60*60, path='/')
     return resp
 
+# download endpoint
 @app.route('/download/<filename>', methods=['GET'])
 def download_file(filename):
     path = os.path.join(UPLOAD_DIR, filename)
     if not os.path.exists(path):
-        flash(TRANSLATIONS[get_lang_from_request()]['temp_missing'])
+        flash(t('temp_missing'))
         return redirect(url_for('index'))
     return send_file(path, as_attachment=True, download_name=filename)
 
+# static files are served automatically by Flask via 'static' folder
+# run server
 if __name__ == '__main__':
     port = 5000
     url = f"http://127.0.0.1:{port}/"
-    print("正在启动页面：", url)
+    print("正在启动本地服务，稍后会在默认浏览器打开界面：", url)
     webbrowser.open(url)
     app.run(host='127.0.0.1', port=port, debug=False)
