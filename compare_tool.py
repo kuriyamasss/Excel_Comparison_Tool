@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-# compare_tool.py (后端主文件 — 请保持文件名不变)
-# 需求: python3, Flask, pandas, openpyxl
-# 安装: pip install flask pandas openpyxl
+# compare_tool.py
+# Requirements: python3, Flask, pandas, openpyxl
 
 import os
 import tempfile
@@ -11,14 +10,11 @@ import re
 from datetime import datetime
 from flask import (
     Flask, request, redirect, url_for, send_file,
-    render_template, flash, make_response, send_from_directory
+    render_template, flash, make_response, jsonify
 )
 import pandas as pd
 from pandas import ExcelFile
 
-# --------------------
-# 配置
-# --------------------
 app = Flask(__name__, static_folder='static', template_folder='templates')
 app.secret_key = "replace-this-with-random-if-needed"
 app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024
@@ -26,7 +22,7 @@ app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024
 UPLOAD_DIR = os.path.join(tempfile.gettempdir(), "py_excel_compare")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# 翻译字典（简中/越南），保持后端 i18n 支持
+# Simplified i18n
 TRANSLATIONS = {
     'zh': {
         'title': '本地化库存比对工具',
@@ -66,7 +62,9 @@ TRANSLATIONS = {
         'download_failed': '下载失败：',
         'lang_label': '语言',
         'download_button': '下载结果',
-        'reset_button': '重新处理数据'
+        'reset_button': '重新处理数据',
+        'back_button': '上一步',
+        'close_button': '关闭程序'
     },
     'vi': {
         'title': 'Công cụ đối chiếu tồn kho cục bộ',
@@ -106,13 +104,12 @@ TRANSLATIONS = {
         'download_failed': 'Tải xuống thất bại:',
         'lang_label': 'Ngôn ngữ',
         'download_button': 'Tải xuống kết quả',
-        'reset_button': 'Xử lý lại dữ liệu'
+        'reset_button': 'Xử lý lại dữ liệu',
+        'back_button': 'Quay lại',
+        'close_button': 'Đóng chương trình'
     }
 }
 
-# --------------------
-# i18n helper
-# --------------------
 def get_lang_from_request():
     lang = request.args.get('lang')
     if lang and lang in TRANSLATIONS:
@@ -125,9 +122,6 @@ def get_lang_from_request():
 def t(key):
     return TRANSLATIONS.get(get_lang_from_request(), TRANSLATIONS['zh']).get(key, key)
 
-# --------------------
-# 辅助函数：文件保存、表头检测、读取表格
-# --------------------
 def safe_save_upload(file_storage, prefix):
     ext = os.path.splitext(file_storage.filename)[1].lower()
     fname = f"{prefix}_{uuid.uuid4().hex}{ext}"
@@ -189,27 +183,20 @@ def read_table(path, sheet_name=0, header_mode='auto', header_row_index=None, pr
         else:
             df = pd.read_excel(path, dtype=str, engine='openpyxl')
             df.columns = [str(c).strip() for c in df.columns]
-    except Exception as e:
+    except Exception:
         raise
     df.columns = [str(c).strip() for c in df.columns]
     return df
 
-# --------------------
-# 模板上下文注入（前端模板可使用 t('key') 与 get_lang）
-# --------------------
 @app.context_processor
 def inject_helpers():
     return dict(t=lambda k: TRANSLATIONS[get_lang_from_request()].get(k, k),
                 get_lang=get_lang_from_request())
 
-# --------------------
-# 路由：主页面（使用 templates/index.html）
-# --------------------
 @app.route('/', methods=['GET'])
 def index():
     return render_template('index.html', old_id=None, new_id=None)
 
-# 上传
 @app.route('/upload', methods=['POST'])
 def upload():
     if 'file_old' not in request.files or 'file_new' not in request.files:
@@ -249,7 +236,6 @@ def upload():
         resp.set_cookie('lang', lang, max_age=365*24*60*60, path='/')
     return resp
 
-# prepare fields (read headers)
 @app.route('/prepare_fields', methods=['POST'])
 def prepare_fields():
     old_id = request.form.get('old_id')
@@ -282,7 +268,6 @@ def prepare_fields():
                                   sheet_old=sheet_old, sheet_new=sheet_new,
                                   header_mode=header_mode, header_row_index=header_row_index)
 
-# sanitize filename
 def sanitize_filename_component(s: str) -> str:
     if s is None:
         return ''
@@ -292,7 +277,6 @@ def sanitize_filename_component(s: str) -> str:
     s = re.sub(r'[^\w\-.]', '', s)
     return s[:100]
 
-# compare and output excel
 @app.route('/compare', methods=['POST'])
 def compare():
     key = request.form.get('key')
@@ -372,7 +356,6 @@ def compare():
         resp.set_cookie('lang', lang, max_age=365*24*60*60, path='/')
     return resp
 
-# download endpoint
 @app.route('/download/<filename>', methods=['GET'])
 def download_file(filename):
     path = os.path.join(UPLOAD_DIR, filename)
@@ -381,8 +364,23 @@ def download_file(filename):
         return redirect(url_for('index'))
     return send_file(path, as_attachment=True, download_name=filename)
 
-# static files are served automatically by Flask via 'static' folder
-# run server
+# --------------------
+# 新增：shutdown 路由（用于关闭本地服务器）
+# 前端点击“关闭程序”时会 POST 到此处以请求优雅结束进程
+# --------------------
+@app.route('/shutdown', methods=['POST'])
+def shutdown():
+    func = request.environ.get('werkzeug.server.shutdown')
+    if func is None:
+        # 如果使用非 werkzeug 服务器，尝试强制退出（在 exe 场景中一般可行）
+        try:
+            os._exit(0)
+        except Exception:
+            return jsonify({"ok": False, "msg": "shutdown not supported"}), 500
+    else:
+        func()
+    return jsonify({"ok": True, "msg": "shutting down"}), 200
+
 if __name__ == '__main__':
     port = 5000
     url = f"http://127.0.0.1:{port}/"

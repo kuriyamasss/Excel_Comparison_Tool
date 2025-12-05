@@ -7,6 +7,8 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
 </head>
 <body>
+
+  <!-- HEADER -->
   <div class="header">
     <div class="header-left">
       <div class="header-title">{{ t('title') }}</div>
@@ -15,7 +17,7 @@
     <div class="header-right">
       <div class="copyright">{{ t('copyright') }}</div>
       <div class="lang-wrap">
-        <label class="lang-label">{{ t('lang_label') }}</label>
+        <label>{{ t('lang_label') }}</label>
         <select id="lang" class="lang-select">
           <option value="zh" {% if get_lang=='zh' %}selected{% endif %}>简体中文</option>
           <option value="vi" {% if get_lang=='vi' %}selected{% endif %}>Tiếng Việt</option>
@@ -25,80 +27,74 @@
   </div>
 
   <main class="main">
-    <form method="post" action="/upload" enctype="multipart/form-data" class="card">
-      <label>{{ t('upload_old') }}
-        <input type="file" name="file_old" accept=".xls,.xlsx,.csv" required>
-      </label>
-      <label>{{ t('upload_new') }}
-        <input type="file" name="file_new" accept=".xls,.xlsx,.csv" required>
-      </label>
-      <div class="notice">{{ t('upload_hint') }}</div>
-      <button type="submit" class="btn-primary">{{ t('upload_button') }}</button>
-    </form>
 
-    {% with messages = get_flashed_messages() %}
-      {% if messages %}
-        <div class="card error-list">
-          <ul>
-          {% for m in messages %}
-            <li>{{ m }}</li>
-          {% endfor %}
-          </ul>
-        </div>
-      {% endif %}
-    {% endwith %}
+    {# ---------------- STEP 1 ---------------- #}
+    {% if not old_id and not new_id and not headers and not download_link %}
+    <section id="step1" class="card">
+      <h3>1. {{ t('upload_button') }}</h3>
+      <form method="post" action="/upload" enctype="multipart/form-data">
+        <label>{{ t('upload_old') }}
+          <input type="file" name="file_old" accept=".xls,.xlsx,.csv" required>
+        </label>
+        <label>{{ t('upload_new') }}
+          <input type="file" name="file_new" accept=".xls,.xlsx,.csv" required>
+        </label>
 
-    {% if old_id and new_id %}
-    <div class="card">
-      <h3>{{ t('step2_title') }}</h3>
+        <div class="notice">{{ t('upload_hint') }}</div>
+
+        <button class="btn-primary" type="submit">{{ t('upload_button') }}</button>
+      </form>
+    </section>
+    {% endif %}
+
+    {# ---------------- STEP 2 ---------------- #}
+    {% if old_id and new_id and not headers and not download_link %}
+    <section id="step2" class="card">
+      <h3>2. {{ t('step2_title') }}</h3>
       <form method="post" action="/prepare_fields">
         <input type="hidden" name="old_id" value="{{ old_id }}">
         <input type="hidden" name="new_id" value="{{ new_id }}">
 
         <label>{{ t('sheet_old_label') }}
           <select name="sheet_old">
-            {% if sheets_old %}
-              {% for s in sheets_old %}
-                <option value="{{ s }}">{{ s }}</option>
-              {% endfor %}
-            {% else %}
-              <option value="">(CSV / 无 sheet)</option>
-            {% endif %}
+            {% for s in sheets_old %}
+              <option value="{{s}}">{{s}}</option>
+            {% endfor %}
           </select>
         </label>
 
         <label>{{ t('sheet_new_label') }}
           <select name="sheet_new">
-            {% if sheets_new %}
-              {% for s in sheets_new %}
-                <option value="{{ s }}">{{ s }}</option>
-              {% endfor %}
-            {% else %}
-              <option value="">(CSV / 无 sheet)</option>
-            {% endif %}
+            {% for s in sheets_new %}
+              <option value="{{s}}">{{s}}</option>
+            {% endfor %}
           </select>
         </label>
 
         <label>{{ t('header_identify') }}
           <select name="header_mode">
-            <option value="auto" {% if header_mode=='auto' %}selected{% endif %}>{{ t('header_auto') }}</option>
-            <option value="manual" {% if header_mode=='manual' %}selected{% endif %}>{{ t('header_manual') }}</option>
-            <option value="none" {% if header_mode=='none' %}selected{% endif %}>{{ t('header_none') }}</option>
+            <option value="auto">自动检测</option>
+            <option value="manual">手动指定</option>
+            <option value="none">无表头</option>
           </select>
         </label>
 
         <label>{{ t('header_row_index') }}
-          <input type="number" name="header_row_index" min="0" value="{{ header_row_index or '' }}" placeholder="例如 0、1、2">
+          <input type="number" name="header_row_index" min="0">
         </label>
 
-        <button type="submit" class="btn-primary">{{ t('prepare_fields') }}</button>
+        <div class="step-actions">
+          <button type="button" id="back1" class="btn-secondary">{{ t('back_button') }}</button>
+          <button class="btn-primary" type="submit">{{ t('prepare_fields') }}</button>
+        </div>
       </form>
-    </div>
+    </section>
     {% endif %}
 
-    {% if headers %}
-    <div class="card">
-      <h3>{{ t('step3_title') }}</h3>
+    {# ---------------- STEP 3 ---------------- #}
+    {% if headers and not download_link %}
+    <section id="step3" class="card">
+      <h3>3. {{ t('step3_title') }}</h3>
       <form method="post" action="/compare">
         <input type="hidden" name="old_id" value="{{ old_id }}">
         <input type="hidden" name="new_id" value="{{ new_id }}">
@@ -110,41 +106,47 @@
         <label>{{ t('select_key') }}
           <select name="key" required>
             {% for h in headers %}
-              <option value="{{ h }}">{{ h }}</option>
+              <option value="{{h}}">{{h}}</option>
             {% endfor %}
           </select>
         </label>
 
         <label>{{ t('dup_strategy') }}
           <select name="dup_strategy">
-            <option value="last" selected>{{ t('dup_last') }}</option>
+            <option value="last">{{ t('dup_last') }}</option>
             <option value="first">{{ t('dup_first') }}</option>
             <option value="error">{{ t('dup_error') }}</option>
           </select>
         </label>
 
-        <button type="submit" class="btn-primary">{{ t('compare_button') }}</button>
+        <div class="step-actions">
+          <button type="button" id="back2" class="btn-secondary">{{ t('back_button') }}</button>
+          <button class="btn-primary" type="submit">{{ t('compare_button') }}</button>
+        </div>
       </form>
-    </div>
+    </section>
     {% endif %}
 
-    {% if download_link and download_name %}
-    <div class="card result-card">
-      <strong>{{ t('download_ready') }}</strong>
-      <div class="result-actions">
-        <button id="downloadBtn" data-url="{{ download_link }}" data-name="{{ download_name }}" class="btn-primary small">{{ t('download_button') }}</button>
-        <span class="filename">{{ download_name }}</span>
-        <button id="resetBtn" class="reset-btn small" type="button">{{ t('reset_button') }}</button>
-      </div>
-    </div>
+    {# ---------------- RESULT ---------------- #}
+    {% if download_link %}
+    <section id="result" class="card">
+      <h3>{{ t('download_ready') }}</h3>
+      <button id="downloadBtn" data-name="{{ download_name }}" data-url="{{ download_link }}" class="btn-primary small">
+        {{ t('download_button') }}
+      </button>
+      <button id="resetBtn" class="reset-btn small">{{ t('reset_button') }}</button>
+    </section>
     {% endif %}
 
     <div class="notice small">{{ t('large_hint') }}</div>
   </main>
 
+  <!-- Close Program -->
+  <button id="closeBtn" class="close-btn">{{ t('close_button') }}</button>
+
   <div id="overlay" class="overlay" aria-hidden="true">
     <div class="box">
-      <div class="spinner" aria-hidden="true"></div>
+      <div class="spinner"></div>
       <div class="processing-text">{{ t('processing') }}</div>
     </div>
   </div>
