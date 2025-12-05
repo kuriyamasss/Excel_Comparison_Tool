@@ -3,6 +3,7 @@
 # Requirements: python3, Flask, pandas, openpyxl
 
 import os
+import sys
 import tempfile
 import uuid
 import webbrowser
@@ -15,19 +16,44 @@ from flask import (
 import pandas as pd
 from pandas import ExcelFile
 
-app = Flask(__name__, static_folder='static', template_folder='templates')
+# 计算运行时模板/静态资源路径（兼容开发环境与 PyInstaller onefile）
+def get_resource_path(relative_path: str) -> str:
+    """
+    Return absolute path to resource, whether running normally or frozen by PyInstaller.
+    For onefile builds, PyInstaller extracts files to sys._MEIPASS.
+    """
+    if getattr(sys, "_MEIPASS", None):
+        base_path = sys._MEIPASS
+    else:
+        base_path = os.path.abspath(os.path.dirname(__file__))
+    return os.path.join(base_path, relative_path)
+
+# 使用辅助函数来设置 Flask 的 template_folder 与 static_folder
+template_folder = get_resource_path("templates")
+static_folder = get_resource_path("static")
+
+# --- diagnostic: print resource locations and existence (临时，用于排查 onefile 问题) ---
+print("DEBUG: sys._MEIPASS =", getattr(sys, "_MEIPASS", None))
+print("DEBUG: template_folder resolved to:", template_folder, " exists:", os.path.exists(template_folder))
+print("DEBUG: static_folder resolved to:", static_folder, " exists:", os.path.exists(static_folder))
+# ---------------------------------------------------------------------------------------
+
+
+# 然后初始化 Flask（替换原来的 app = Flask(...)）：
+app = Flask(__name__, template_folder=template_folder, static_folder=static_folder)
 app.secret_key = "replace-this-with-random-if-needed"
 app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024
 
 UPLOAD_DIR = os.path.join(tempfile.gettempdir(), "py_excel_compare")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+
 # Simplified i18n
 TRANSLATIONS = {
     'zh': {
         'title': '本地化库存比对工具',
         'local_run': '(本地运行)',
-        'copyright': '© Yining.li',
+        'copyright': '© kuriyamasss',
         'upload_old': '上传 - 旧 库存表（Excel 或 CSV）：',
         'upload_new': '上传 - 新 库存表（Excel 或 CSV）：',
         'upload_hint': '两表上传后，会读取 sheet 列表（若为 Excel）并在下一步呈现 sheet 与表头选择。',
@@ -109,6 +135,8 @@ TRANSLATIONS = {
         'close_button': 'Đóng chương trình'
     }
 }
+
+
 
 def get_lang_from_request():
     lang = request.args.get('lang')
