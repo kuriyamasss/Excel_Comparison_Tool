@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # compare_tool.py
-# 需求: python3, Flask, pandas, openpyxl
-# 安装: pip install flask pandas openpyxl
+# Requirements: python3, Flask, pandas, openpyxl
+# Install: pip install flask pandas openpyxl
 
 import os
 import tempfile
@@ -20,12 +20,12 @@ app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024
 UPLOAD_DIR = os.path.join(tempfile.gettempdir(), "py_excel_compare")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# 简中 / 越南文（保留），默认 zh
+# Translations: simplified Chinese (zh) default, Vietnamese (vi)
 TRANSLATIONS = {
     'zh': {
         'title': '本地化库存比对工具',
         'local_run': '(本地运行)',
-        'copyright': '© Kuriyamasss',
+        'copyright': '© Yining.li',
         'upload_old': '上传 - 旧 库存表（Excel 或 CSV）：',
         'upload_new': '上传 - 新 库存表（Excel 或 CSV）：',
         'upload_hint': '两表上传后，会读取 sheet 列表（若为 Excel）并在下一步呈现 sheet 与表头选择。',
@@ -59,7 +59,8 @@ TRANSLATIONS = {
         'generate_failed': '生成结果档失败: ',
         'download_failed': '下载失败：',
         'lang_label': '语言',
-        'download_button': '下载结果'
+        'download_button': '下载结果',
+        'reset_button': '重新处理数据'
     },
     'vi': {
         'title': 'Công cụ đối chiếu tồn kho cục bộ',
@@ -98,7 +99,8 @@ TRANSLATIONS = {
         'generate_failed': 'Tạo tệp kết quả thất bại: ',
         'download_failed': 'Tải xuống thất bại:',
         'lang_label': 'Ngôn ngữ',
-        'download_button': 'Tải xuống kết quả'
+        'download_button': 'Tải xuống kết quả',
+        'reset_button': 'Xử lý lại dữ liệu'
     }
 }
 
@@ -115,7 +117,7 @@ def t(key):
     lang = get_lang_from_request()
     return TRANSLATIONS.get(lang, TRANSLATIONS['zh']).get(key, key)
 
-# HTML 模板 — 精简进度部分，仅保留圆形 spinner；下载由 JS 发起（fetch）以便在完成后隐藏 overlay
+# HTML template
 HTML = """
 <!doctype html>
 <html>
@@ -135,11 +137,25 @@ select, button, input[type=number]{margin-top:8px;padding:8px;font-size:14px;}
 .notice{color:#666;margin-top:6px;}
 .result-link{margin-top:16px;padding:12px;background:#f4f4f4;border-radius:6px;}
 
-/* overlay: 仅保留 spinner（UI MODIFIED） */
+/* overlay: spinner only */
 .overlay { display:none; position: fixed; left:0; right:0; top:0; bottom:0; background: rgba(255,255,255,0.85); z-index: 10000; align-items: center; justify-content: center; flex-direction: column; gap:12px; }
 .overlay .box { display:flex; align-items:center; gap:12px; background: #fff; padding:14px 18px; border-radius:8px; box-shadow:0 6px 18px rgba(0,0,0,0.08); }
 .spinner{ width:44px; height:44px; border-radius:50%; border:5px solid rgba(0,0,0,0.08); border-top-color:#1976d2; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg);} }
+
+/* reset button style (淡橙底，白字) */
+.reset-btn{
+  background: #ffa94d;
+  color: #ffffff;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-left: 8px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+}
+.reset-btn:active{ transform: translateY(1px); }
 </style>
 </head>
 <body>
@@ -190,6 +206,7 @@ select, button, input[type=number]{margin-top:8px;padding:8px;font-size:14px;}
       <form method="post" action="/prepare_fields">
         <input type="hidden" name="old_id" value="{{ old_id }}">
         <input type="hidden" name="new_id" value="{{ new_id }}">
+
         <label>{{t('sheet_old_label')}}
           <select name="sheet_old">
             {% if sheets_old %}
@@ -201,6 +218,7 @@ select, button, input[type=number]{margin-top:8px;padding:8px;font-size:14px;}
             {% endif %}
           </select>
         </label>
+
         <label>{{t('sheet_new_label')}}
           <select name="sheet_new">
             {% if sheets_new %}
@@ -212,6 +230,7 @@ select, button, input[type=number]{margin-top:8px;padding:8px;font-size:14px;}
             {% endif %}
           </select>
         </label>
+
         <label>{{t('header_identify')}}
           <select name="header_mode">
             <option value="auto" {% if header_mode=='auto' %}selected{% endif %}>{{t('header_auto')}}</option>
@@ -219,9 +238,11 @@ select, button, input[type=number]{margin-top:8px;padding:8px;font-size:14px;}
             <option value="none" {% if header_mode=='none' %}selected{% endif %}>{{t('header_none')}}</option>
           </select>
         </label>
+
         <label>{{t('header_row_index')}}
           <input type="number" name="header_row_index" min="0" value="{{ header_row_index or '' }}" placeholder="例如 0、1、2">
         </label>
+
         <button type="submit">{{t('prepare_fields')}}</button>
       </form>
     </div>
@@ -237,6 +258,7 @@ select, button, input[type=number]{margin-top:8px;padding:8px;font-size:14px;}
         <input type="hidden" name="sheet_new" value="{{ sheet_new }}">
         <input type="hidden" name="header_mode" value="{{ header_mode }}">
         <input type="hidden" name="header_row_index" value="{{ header_row_index }}">
+
         <label>{{t('select_key')}}
           <select name="key" required>
             {% for h in headers %}
@@ -244,6 +266,7 @@ select, button, input[type=number]{margin-top:8px;padding:8px;font-size:14px;}
             {% endfor %}
           </select>
         </label>
+
         <label>{{t('dup_strategy')}}
           <select name="dup_strategy">
             <option value="last" selected>{{t('dup_last')}}</option>
@@ -259,10 +282,10 @@ select, button, input[type=number]{margin-top:8px;padding:8px;font-size:14px;}
     {% if download_link and download_name %}
     <div class="result-link">
       <strong>{{t('download_ready')}}</strong>
-      <!-- UI/JS MODIFIED: 使用 JS 发起 fetch 下载，隐藏 overlay 在完成后（see script） -->
-      <div style="margin-top:8px;">
+      <div style="margin-top:8px; display:flex; align-items:center; gap:12px;">
         <button id="downloadBtn" data-url="{{ download_link }}" data-name="{{ download_name }}">{{t('download_button')}}</button>
-        <span style="margin-left:12px;color:#444;">{{ download_name }}</span>
+        <span style="color:#444;">{{ download_name }}</span>
+        <button id="resetBtn" class="reset-btn" type="button">{{t('reset_button')}}</button>
       </div>
     </div>
     {% endif %}
@@ -270,7 +293,6 @@ select, button, input[type=number]{margin-top:8px;padding:8px;font-size:14px;}
     <div class="notice" style="margin-top:18px;">{{t('large_hint')}}</div>
   </div>
 
-  <!-- overlay: 仅 spinner -->
   <div id="overlay" class="overlay">
     <div class="box">
       <div class="spinner" aria-hidden="true"></div>
@@ -279,25 +301,17 @@ select, button, input[type=number]{margin-top:8px;padding:8px;font-size:14px;}
   </div>
 
 <script>
-// 显示 overlay
-function showOverlay(){
-  const ov = document.getElementById('overlay');
-  if(ov) ov.style.display = 'flex';
-}
-function hideOverlay(){
-  const ov = document.getElementById('overlay');
-  if(ov) ov.style.display = 'none';
-}
+// Overlay control
+function showOverlay(){ const ov = document.getElementById('overlay'); if(ov) ov.style.display='flex'; }
+function hideOverlay(){ const ov = document.getElementById('overlay'); if(ov) ov.style.display='none'; }
 
-// 表单提交时显示 overlay（保持原行为）
 document.addEventListener('DOMContentLoaded', function(){
+  // show overlay on any form submit
   document.querySelectorAll('form').forEach(function(f){
-    f.addEventListener('submit', function(e){
-      showOverlay();
-    });
+    f.addEventListener('submit', function(e){ showOverlay(); });
   });
 
-  // 语言选择写 cookie 并重载
+  // language selector: save cookie and reload with lang param
   const sel = document.getElementById('lang');
   if(sel){
     sel.addEventListener('change', function(){
@@ -309,7 +323,7 @@ document.addEventListener('DOMContentLoaded', function(){
     });
   }
 
-  // UI/JS MODIFIED: 下载按钮通过 fetch 获取文件并自动隐藏 overlay（fetch 完成或失败后 hideOverlay）.
+  // download via fetch; hide overlay in finally
   const dl = document.getElementById('downloadBtn');
   if(dl){
     dl.addEventListener('click', async function(e){
@@ -318,11 +332,9 @@ document.addEventListener('DOMContentLoaded', function(){
       const name = dl.getAttribute('data-name') || 'compare_result.xlsx';
       try{
         showOverlay();
-        // fetch as blob
         const res = await fetch(url, { method: 'GET' });
         if(!res.ok) throw new Error('Network response was not ok');
         const blob = await res.blob();
-        // create temporary link and click
         const blobUrl = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = blobUrl;
@@ -332,11 +344,21 @@ document.addEventListener('DOMContentLoaded', function(){
         a.remove();
         window.URL.revokeObjectURL(blobUrl);
       }catch(err){
-        alert("{{t('download_failed')}} " + err.message);
+        alert("{{t('download_failed')}}" + err.message);
       }finally{
-        // Always hide overlay after attempt
         hideOverlay();
       }
+    });
+  }
+
+  // reset button: hide overlay and navigate to root to reset UI state
+  const resetBtn = document.getElementById('resetBtn');
+  if(resetBtn){
+    resetBtn.addEventListener('click', function(e){
+      e.preventDefault();
+      hideOverlay();
+      // keep language cookie but reset UI: navigate root
+      window.location.href = '/';
     });
   }
 });
@@ -492,14 +514,11 @@ def prepare_fields():
                                   header_mode=header_mode, header_row_index=header_row_index)
 
 def sanitize_filename_component(s: str) -> str:
-    # 替換掉不安全字元，保留有限字符
     if s is None:
         return ''
     s = str(s)
     s = s.strip()
-    # 把空白改为下划线
     s = re.sub(r'\s+', '_', s)
-    # 移除非字母数字下划线或中划线或点
     s = re.sub(r'[^\w\-.]', '', s)
     return s[:100]
 
@@ -559,7 +578,6 @@ def compare():
     df_only_old = df_old_u2.loc[only_old_idx]
     df_only_new = df_new_u2.loc[only_new_idx]
 
-    # FILENAME MODIFIED: 更易读的文件名，包含时间、key 与计数
     now = datetime.now().strftime('%Y%m%d_%H%M%S')
     safe_key = sanitize_filename_component(key)
     n_both = len(common_idx)
@@ -577,7 +595,6 @@ def compare():
         return redirect(url_for('index'))
 
     download_link = url_for('download_file', filename=out_filename)
-    # 传回 download_link 与 download_name 供前端使用
     resp = make_response(render_template_string(HTML, download_link=download_link, download_name=out_filename))
     lang = request.args.get('lang')
     if lang and lang in TRANSLATIONS:
@@ -590,12 +607,11 @@ def download_file(filename):
     if not os.path.exists(path):
         flash(TRANSLATIONS[get_lang_from_request()]['temp_missing'])
         return redirect(url_for('index'))
-    # send_file 会返回文件主体，前端使用 fetch 获取 blob
     return send_file(path, as_attachment=True, download_name=filename)
 
 if __name__ == '__main__':
     port = 5000
     url = f"http://127.0.0.1:{port}/"
-    print("正在啟動本地服務，稍後會在預設瀏覽器開啟界面：", url)
+    print("正在启动页面：", url)
     webbrowser.open(url)
     app.run(host='127.0.0.1', port=port, debug=False)
