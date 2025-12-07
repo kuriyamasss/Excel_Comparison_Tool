@@ -1,171 +1,166 @@
-# Excel 数据对比工具
+# 本地化库存比对工具（Excel Compare Tool）
 
-一款本地 Excel/CSV 数据对比工具，适用于库存或零件编号数据集。
-
-该工具基于 **Python + Flask** 构建，提供基于浏览器的界面，用于对比两个表格（新旧表格），并导出交集和差异。
-
-支持 `.xlsx`、`.xls`、`.csv` 格式，支持多工作表 Excel 文件，具备自动检测表头、处理重复键值以及多语言界面（简体中文和越南语）。
+本工具用于对**新旧两份库存 Excel/CSV 文件**进行比对，自动生成差异报告。  
+支持本地运行，无需网络连接，适合企业内部环境使用。
 
 ---
 
-## 特征
+# 🚀 功能特性
 
-- 上传**旧表**和**新表**（Excel 或 CSV）
-- 自动检测或手动指定：
- - 工作表（工作表）
- - 标题行（表头）
-- 选择比较键（例如料号/零件号）
-- 选择重复键策略：
- - 保持第一
- - 保持最后
- - 重复错误
-- 导出包含以下内容的 Excel 文件：
- - `intersection`（两表共同行）
- - `only_in_old`（仅旧表有）
- - `only_in_new`（仅新表有）
-- 加载旋转和进度指示器
-- 多语言用户界面：简体中文（默认）/Tiếng Việt
-- 打包成**单文件 Windows EXE**
+## 1. 三步骤可视化比对流程
+程序以清晰的三步流程引导用户完成比对：
 
----
+### **Step 1：上传文件**
+- 上传旧库存表、新库存表（Excel 或 CSV）。
+- 自动读取文件结构并进入下一步骤。
 
-## 使用方法（EXE版）
+### **Step 2：选择 Sheet & 表头模式**
+- 选择要比对的 Sheet（Excel 多工作表支持）。
+- 选择表头识别方式：自动 / 手动指定行 / 无表头。
+- 进入字段选择步骤。
 
-1. 从 **Releases** 下载最新的 EXE。
-2. 双击“.exe”。
-3. 该工具将自动打开您的默认浏览器，地址为：
+### **Step 3：选择比对键 Key**
+- 从两表共有字段中选择用于比对的键（例如料号、产品编号等）。
+- 选择重复行处理策略：保留首个/最后一个/严格要求唯一。
+- 执行比对并生成结果。
 
-http://127.0.0.1:5000/
+### **比对结果**
+生成 Excel 文件，包含：
+- intersection（两表均存在）
+- only_in_old（旧表独有）
+- only_in_new（新表独有）
 
-4. 上传旧表格/新表格 → 选择工作表和表头 → 选择图例 → 生成输出。
-
-5. 下载生成的对比报告。
-
-> 注意：Windows SmartScreen 可能会警告未签名的可执行文件。如果在受信任的环境中运行，请选择“仍然运行”。
+下载完成后可重新处理。
 
 ---
 
-## 从源代码运行（Python）
+# 🎯 主要新增功能（最新版本）
 
-### 1. 克隆仓库
+## 1. **真正的分步骤页面，上一页/下一页准确跳转**
+- 每个步骤在后端真正渲染，前端不再依赖隐藏显示。
+- 避免跳转错误、页面残留、刷新后状态丢失等问题。
 
-```bash
+## 2. **新增“上一步”按钮（服务器级返回）**
+- Step 2 → Step 1：重新进入上传页。
+- Step 3 → Step 2：保留 sheet/header 的配置返回。
 
-git clone https://github.com/YOUR_NAME/Excel_Comparison_Tool.git
+## 3. **新增“重新处理数据”按钮**
+- 下载完成后，可一键重置回到第一步。
+- 修复下载后页面可能出现空白的问题。
 
-cd Excel_Comparison_Tool
+## 4. **新增“关闭程序”按钮**
+- 关闭浏览器、关闭 Flask 服务、退出系统进程。
+- 在 PyInstaller 打包的 EXE 中也可完全退出。
 
+## 5. **刷新页面自动回到第一步**
+- 用户按 F5 或浏览器刷新时不再出现空白页面，而是回到第一步。
+
+## 6. **多语言支持（中文/越南语）**
+- 页面右上角可切换语言。
+- 语言选择会保存为 cookie，刷新或进入下一步不会丢失。
+
+## 7. **全面支持 PyInstaller onefile 打包**
+- 修复所有模板/静态文件找不到的问题。
+- 使用 `get_resource_path()` 自动定位模板与静态资源路径。
+- 完全支持离线分发给他人使用。
+
+---
+
+# 🛠️ 安装与运行
+
+## 方式 A：源码运行（开发模式）
+环境要求：
 ```
-
-### 2. （推荐）创建虚拟环境
-
-```bash
-
-python -m venv venv
-
-# Windows:
-
-venv\Scripts\activate
-
-# macOS/Linux:
-
-# source venv/bin/activate
-
-```
-
-### 3. 安装依赖项
-
-```bash
-
-pip install -r requirements.txt
-
-```
-或者：
-
-```bash
-
+Python 3.9+
 pip install flask pandas openpyxl
-
 ```
 
-### 4. 运行应用程序
-
-```bash
-
+运行：
+```
 python compare_tool.py
-
 ```
-访问：
 
-```bash
-
+浏览器将自动打开：
+```
 http://127.0.0.1:5000/
-
 ```
 
-## 示例输出
+---
 
-生成的 Excel 文件将包含多个工作表：
+## 方式 B：使用打包好的 EXE（推荐分发）
+你可以将程序打包成一个单文件应用，适合不安装 Python 的用户使用。
 
-| 工作表名称 | 含义 |
-| ------------ | ---------------------------- |
-| 交集 | 两个表中都存在的行 |
-| 仅在旧表中存在的行 | 旧表中特有的行 |
-| 仅在新表中特有的行 | 新表中特有的行 |
-
-文件命名示例：
-
-```text
-compare_20251204_145230_key_料号_inter12_old5_new7.xlsx
+### PyInstaller 打包指令（生产版）：
+```
+pyinstaller --onefile ^
+  --noconsole ^
+  --clean ^
+  --icon "app_icon.ico" ^
+  --add-data "templates;templates" ^
+  --add-data "static;static" ^
+  --hidden-import pandas ^
+  --hidden-import numpy ^
+  --hidden-import openpyxl ^
+  --hidden-import pkg_resources.py2_warn ^
+  compare_tool.py
 ```
 
-## 打包为 EXE 文件（PyInstaller）
-
-测试（onedir）：
-
-```bash
-pyinstaller --onedir --clean compare_tool.py
-
+打包成功后使用：
+```
+dist/compare_tool.exe
 ```
 
-最终构建（onefile）：
+程序会自动打开浏览器进入首页。
 
-```bash
-pyinstaller --onefile --clean ^
---hidden-import=openpyxl --hidden-import=pandas ^
---add-data "venv\Lib\site-packages\openpyxl;openpyxl" ^
-compare_tool.py
-```
+---
 
-EXE 文件将位于 dist/ 目录下。
-
-## 项目结构
-
-```cpp
-Excel_Comparison_Tool/
-│── compare_tool.py
-│── README.md
-│── requirements.txt
-│── static/
-│── templates/
-└── venv/ (已忽略)
+# 📦 结果文件命名规则
+生成的报告格式如下：
 
 ```
+compare_YYYYMMDD_HHMMSS_key_both{X}_old{Y}_new{Z}.xlsx
+```
 
-## 注意事项和限制
+含义：
+- X = 新旧表都存在的条目数
+- Y = 旧表独有条目数
+- Z = 新表独有条目数
 
-· 处理非常大的数据集（> 100k–500k 行）时，内存使用量会比较紧张。
+---
 
-· 使用 Excel 时可能会出现内存不足的情况；建议对于较大的工作负载使用 CSV 文件。
+# 📁 项目目录结构（最新版本）
 
-· 未签名的 EXE 文件可能会触发杀毒软件或 SmartScreen 的警告。
+```
+project/
+│ compare_tool.py
+│ app_icon.ico
+│ README.md
+│
+├─templates/
+│   index.html
+│
+└─static/
+    ├─js/
+    │   main.js
+    ├─css/
+    │   styles.css
+    └─img/
+```
 
-## 许可证
+---
 
-本项目采用 MIT 许可证发布。
+# ❤️ 作者
+**kuriyamasss**
 
-## 联系方式
+本工具作为个人工作流改进项目开源，可用于企业内部流程优化与自动化。
 
-作者：kuriyamasss
+---
 
-如有任何问题、建议或功能请求，请在 GitHub 上提交 Issue。
+# 📝 许可协议
+你可自由用于企业内部与个人用途，但如需对外发布商业版本请与作者联系。
+
+---
+
+# 📮 反馈与建议
+如你发现任何问题或希望继续改进功能，可在 GitHub Issues 中提交需求。
+

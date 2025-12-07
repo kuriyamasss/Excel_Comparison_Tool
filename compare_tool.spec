@@ -5,8 +5,8 @@ a = Analysis(
     ['compare_tool.py'],
     pathex=[],
     binaries=[],
-    datas=[],
-    hiddenimports=[],
+    datas=[('templates', 'templates'), ('static', 'static')],
+    hiddenimports=['pandas', 'numpy', 'openpyxl', 'pkg_resources.py2_warn'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -35,4 +35,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=['app_icon.ico'],
 )
