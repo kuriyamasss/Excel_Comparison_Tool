@@ -596,6 +596,6 @@ def download_file(filename):
 if __name__ == '__main__':
     port = 5000
     url = f"http://127.0.0.1:{port}/"
-    print("正在啟動本地服務，稍後會在預設瀏覽器開啟界面：", url)
+    print("正在启动页面：", url)
     webbrowser.open(url)
     app.run(host='127.0.0.1', port=port, debug=False)
